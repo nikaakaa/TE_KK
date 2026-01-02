@@ -292,7 +292,7 @@ namespace TEngine.Editor.UI
             }
 
             // strVar.AppendLine($"\t\tprivate {componentName} {varName};");
-            strVar.AppendLine($"\t\tprivate {componentName} {varName}{(ScriptGeneratorSetting.Instance.NullableEnable?" = null!;":";")}");
+            strVar.AppendLine($"\t\tprivate {componentName} {varName}{(ScriptGeneratorSetting.Instance.NullableEnable ? " = null!;" : ";")}");
             if (rule.componentName == UIComponentName.GameObject)
             {
                 strBind.AppendLine($"\t\t\t{varName} = m_bindComponent.GetComponent<RectTransform>({m_bindIndex}).gameObject;");
@@ -342,7 +342,7 @@ namespace TEngine.Editor.UI
                     break;
             }
         }
-        
+
         #region GenerateImpCSharp
 
         private static bool GenerateImpCSharpScript(bool isUniTask = false, string fileName = null, string impSavePath = null, string uiTypeName = null)
@@ -359,7 +359,7 @@ namespace TEngine.Editor.UI
             StringBuilder strFile = new StringBuilder();
 
 #if TextMeshPro
-                strFile.AppendLine("using TMPro;");
+            strFile.AppendLine("using TMPro;");
 #endif
             if (isUniTask)
             {
@@ -503,7 +503,7 @@ namespace TEngine.Editor.UI
 
         #region GenerateUIComponent
 
-         public static bool GenerateUIComponentScript()
+        public static bool GenerateUIComponentScript()
         {
             var root = Selection.activeTransform;
 

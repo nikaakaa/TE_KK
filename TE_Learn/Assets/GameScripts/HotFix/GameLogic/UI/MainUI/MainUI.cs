@@ -8,6 +8,7 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TEngine;
 using Cysharp.Threading.Tasks;
 
@@ -18,7 +19,41 @@ namespace GameLogic
 	{
         private partial void OnClick_StartBtn()
         {
-            ModuleSystem.GetModule<ISceneModule>().LoadSceneAsync("GameScene").Forget();
+            ModuleSystem.GetModule<ISceneModule>().LoadSceneAsync("GameScene",progressCallBack: (sceneName) =>
+            {
+                // 场景加载完成后，设置相机堆栈
+                SetupCameraStack();
+            }).Forget();
+            
+            GameModule.UI.HideUI<MainUI>();
+            GameModule.UI.ShowUIAsync<GameUI>();
+        }
+        private void SetupCameraStack()
+        {
+            var mainCamera = Camera.main;
+            if (mainCamera == null) return;
+            
+            var uiCamera = UIModule.Instance.UICamera;
+            if (uiCamera == null) return;
+
+            // URP camera stack support (use reflection to avoid hard dependency on URP extension methods/assemblies)
+            var urpAdditionalDataType = System.Type.GetType(
+                "UnityEngine.Rendering.Universal.UniversalAdditionalCameraData, Unity.RenderPipelines.Universal.Runtime");
+            if (urpAdditionalDataType == null) return;
+
+            var additionalData = mainCamera.GetComponent(urpAdditionalDataType);
+            if (additionalData == null) return;
+
+            var cameraStackProperty = urpAdditionalDataType.GetProperty("cameraStack");
+            if (cameraStackProperty == null) return;
+
+            var cameraStack = cameraStackProperty.GetValue(additionalData) as System.Collections.IList;
+            if (cameraStack == null) return;
+
+            if (!cameraStack.Contains(uiCamera))
+            {
+                cameraStack.Add(uiCamera);
+            }
         }
 
 		private partial void OnClick_QuitBtn()
