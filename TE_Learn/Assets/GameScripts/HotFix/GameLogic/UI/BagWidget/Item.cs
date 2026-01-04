@@ -5,22 +5,31 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// 背包物品 Widget - 支持拖拽
+/// 背包物品 Widget - 支持拖拽（MVE 模式重构版）
 /// </summary>
 public class Item : UIWidget
 {
+    #region 字段
+
     // UI 组件
     private Image m_img_Icon;
-    private CanvasGroup m_canvasGroup;
 
     // 状态
-    private Slot m_originalSlot;    // 原始所在槽位
-    private Slot m_targetSlot;      // 拖拽目标槽位
+    private Slot m_currentSlot;
     private Vector3 m_originalPosition;
 
-    // 物品数据（简单示例）
+    // 物品数据（从 ItemData 同步）
     public int ItemId { get; private set; }
     public string ItemName { get; private set; }
+
+    /// <summary>
+    /// 当前所在槽位
+    /// </summary>
+    public Slot CurrentSlot => m_currentSlot;
+
+    #endregion
+
+    #region 生命周期
 
     protected override void OnCreate()
     {
@@ -44,28 +53,39 @@ public class Item : UIWidget
         AddTrigger(trigger, EventTriggerType.PointerClick, OnClick);
     }
 
+    #endregion
+
+    #region 数据刷新（MVE 核心：数据驱动显示）
+
     /// <summary>
-    /// 设置物品数据
+    /// 根据 ItemData 刷新显示
     /// </summary>
-    public void SetData(int itemId, string itemName, Color color)
+    public void Refresh(ItemData itemData)
     {
-        ItemId = itemId;
-        ItemName = itemName;
+        ItemId = itemData.Id;
+        ItemName = itemData.Name;
 
         if (m_img_Icon != null)
         {
-            m_img_Icon.color = color;
+            m_img_Icon.color = itemData.IconColor;
         }
 
-        Log.Info($"物品设置: ID={itemId}, Name={itemName}");
+        gameObject.name = $"Item_{itemData.Id}_{itemData.Name}";
     }
+
+    #endregion
+
+    #region 槽位绑定
 
     /// <summary>
     /// 绑定到槽位
     /// </summary>
     public void BindToSlot(Slot slot)
     {
-        m_originalSlot = slot;
+        // 清理旧槽位引用
+        m_currentSlot?.ClearItem();
+
+        m_currentSlot = slot;
         slot.SetItem(this);
 
         // 设置位置到槽位中心
@@ -73,6 +93,8 @@ public class Item : UIWidget
         rectTransform.localPosition = Vector3.zero;
         rectTransform.localScale = Vector3.one;
     }
+
+    #endregion
 
     #region 事件处理
 
@@ -86,13 +108,10 @@ public class Item : UIWidget
 
     private void OnBeginDrag(BaseEventData data)
     {
-        var pointer = data as PointerEventData;
-
-        // 记录原始位置和父节点
+        // 记录原始位置
         m_originalPosition = rectTransform.position;
-        m_targetSlot = null;
 
-        // // 禁用射线检测，让下方UI可被检测
+        // 禁用射线检测，让下方UI可被检测
         if (m_img_Icon != null)
         {
             m_img_Icon.raycastTarget = false;
@@ -108,18 +127,15 @@ public class Item : UIWidget
         // 提升层级，显示在最前
         rectTransform.SetAsLastSibling();
 
-        // 通知背包UI当前正在拖拽的物品
+        // 通知背包UI
         var bagUI = OwnerWindow as GameBagUI;
         bagUI?.OnItemBeginDrag(this);
-
-        Log.Info($"开始拖拽物品: {ItemName}");
     }
 
     private void OnDrag(BaseEventData data)
     {
         var pointer = data as PointerEventData;
 
-        // 将屏幕坐标转换为 Canvas 坐标
         var canvas = OwnerWindow?.Canvas;
         if (canvas != null)
         {
@@ -141,42 +157,32 @@ public class Item : UIWidget
         }
 
         var bagUI = OwnerWindow as GameBagUI;
-        m_targetSlot = bagUI?.GetHoveredSlot();
+        var targetSlot = bagUI?.GetHoveredSlot();
 
-        if (m_targetSlot != null && m_targetSlot != m_originalSlot)
+        if (targetSlot != null && targetSlot != m_currentSlot)
         {
-            // 交换物品
-            var otherItem = m_targetSlot.CurrentItem;
-
-            if (otherItem != null)
-            {
-                // 槽位有物品，交换位置
-                otherItem.BindToSlot(m_originalSlot);
-            }
-            else
-            {
-                // 槽位为空，清空原槽位
-                m_originalSlot.ClearItem();
-            }
-
-            // 绑定到新槽位
-            BindToSlot(m_targetSlot);
-            Log.Info($"物品 {ItemName} 移动到新槽位");
+            // 通知 UI 层处理移动（UI 层会调用 BagSystem）
+            bagUI?.OnItemEndDrag(this, targetSlot);
         }
         else
         {
-            // 返回原位
-            rectTransform.position = m_originalPosition;
-            Log.Info($"物品 {ItemName} 返回原位");
-        }
+            // 返回原位（先回到原槽位）
+            if (m_currentSlot != null)
+            {
+                rectTransform.SetParent(m_currentSlot.rectTransform);
+                rectTransform.localPosition = Vector3.zero;
+            }
+            else
+            {
+                rectTransform.position = m_originalPosition;
+            }
 
-        bagUI?.OnItemEndDrag(this);
+            bagUI?.OnItemEndDrag(this, null);
+        }
     }
 
     private void OnClick(BaseEventData data)
     {
-        Log.Info($"点击物品: {ItemName} (ID: {ItemId})");
-
         var bagUI = OwnerWindow as GameBagUI;
         bagUI?.OnItemClicked(this);
     }

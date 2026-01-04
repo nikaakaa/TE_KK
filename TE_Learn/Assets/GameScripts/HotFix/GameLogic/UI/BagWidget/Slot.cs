@@ -5,10 +5,12 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// 背包槽位 Widget - 接收物品拖放
+/// 背包槽位 Widget - 接收物品拖放（MVE 模式重构版）
 /// </summary>
 public class Slot : UIWidget
 {
+    #region 字段
+
     // UI 组件
     private Image m_img_Background;
 
@@ -18,9 +20,12 @@ public class Slot : UIWidget
     public bool IsEmpty => CurrentItem == null;
 
     // 悬停状态
-    private bool m_isHovered;
     private Color m_normalColor = new Color(0.2f, 0.2f, 0.2f, 1f);
     private Color m_hoverColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+
+    #endregion
+
+    #region 生命周期
 
     protected override void OnCreate()
     {
@@ -43,6 +48,10 @@ public class Slot : UIWidget
         AddTrigger(trigger, EventTriggerType.PointerExit, OnPointerExit);
     }
 
+    #endregion
+
+    #region 初始化
+
     /// <summary>
     /// 初始化槽位
     /// </summary>
@@ -51,6 +60,10 @@ public class Slot : UIWidget
         SlotIndex = index;
         CurrentItem = null;
     }
+
+    #endregion
+
+    #region 物品管理
 
     /// <summary>
     /// 设置物品到此槽位
@@ -68,6 +81,8 @@ public class Slot : UIWidget
         CurrentItem = null;
     }
 
+    #endregion
+
     #region 事件处理
 
     private void AddTrigger(EventTrigger trigger, EventTriggerType type,
@@ -80,8 +95,6 @@ public class Slot : UIWidget
 
     private void OnPointerEnter(BaseEventData data)
     {
-        m_isHovered = true;
-
         // 高亮显示
         if (m_img_Background != null)
         {
@@ -95,8 +108,6 @@ public class Slot : UIWidget
 
     private void OnPointerExit(BaseEventData data)
     {
-        m_isHovered = false;
-
         // 恢复颜色
         if (m_img_Background != null)
         {

@@ -1,45 +1,38 @@
 ﻿using System.Collections.Generic;
 using TEngine;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace GameLogic
 {
     /// <summary>
-    /// 背包UI - 管理槽位和物品
+    /// 背包UI - MVE 模式（事件驱动）
+    /// View 层只负责显示，业务逻辑交给 BagSystem
     /// </summary>
     [Window(UILayer.UI, location: "GameBagUI")]
     public partial class GameBagUI
     {
         #region 字段
 
-        // 槽位和物品列表
-        private List<Slot> m_slots = new List<Slot>();
-        private List<Item> m_items = new List<Item>();
+        // Widget 列表
+        private readonly List<Slot> m_slots = new List<Slot>();
+        private readonly Dictionary<int, Item> m_itemWidgets = new Dictionary<int, Item>(); // itemId -> Widget
 
-        // 当前拖拽的物品
+        // 拖拽状态
         private Item m_draggingItem;
-
-        // 当前悬停的槽位
         private Slot m_hoveredSlot;
 
-        // 预制体引用（需要在预制体中设置，或通过 UIBindComponent 获取）
+        // 预制体资源路径
+        private const string SlotPrefabPath = "Slot";
+        private const string ItemPrefabPath = "Item";
+
+        // 缓存的预制体引用
         private GameObject m_slotPrefab;
         private GameObject m_itemPrefab;
+        private bool m_prefabsLoaded;
 
         // 容器引用
         private Transform m_slotContainer;
-
-        // 物品ID计数器
-        private int m_itemIdCounter = 0;
-
-        // 随机颜色用于演示
-        private Color[] m_itemColors = new Color[]
-        {
-            Color.red, Color.green, Color.blue,
-            Color.yellow, Color.cyan, Color.magenta
-        };
 
         #endregion
 
@@ -49,80 +42,163 @@ namespace GameLogic
         {
             base.OnCreate();
 
-            // 查找 ScrollRect 并使用其 content 作为槽位容器
+            // 查找 ScrollRect 的 content 作为槽位容器
             var scrollRect = gameObject.GetComponentInChildren<ScrollRect>();
-            if (scrollRect != null && scrollRect.content != null)
-            {
-                m_slotContainer = scrollRect.content;
-            }
-            else
-            {
-                // 备用：直接使用自身
-                m_slotContainer = transform;
-            }
+            m_slotContainer = scrollRect != null && scrollRect.content != null
+                ? scrollRect.content
+                : transform;
 
-            // 查找现有的槽位预制体
-            FindPrefabs();
+            // 异步加载预制体
+            LoadPrefabsAsync();
+        }
 
-            // 创建初始槽位
-            CreateSlots(9);
-
-            Log.Info("背包UI创建完成");
+        /// <summary>
+        /// 注册事件监听（重要：MVE 模式核心）
+        /// </summary>
+        protected override void RegisterEvent()
+        {
+            // 订阅背包事件
+            AddUIEvent<int>(BagEvents.BagInitialized, OnBagInitialized);
+            AddUIEvent<ItemData>(BagEvents.ItemAdded, OnItemAdded);
+            AddUIEvent<int>(BagEvents.ItemRemoved, OnItemRemoved);
+            AddUIEvent<int, int, int>(BagEvents.ItemMoved, OnItemMoved);
+            AddUIEvent(BagEvents.BagFull, OnBagFull);
         }
 
         protected override void OnRefresh()
         {
             base.OnRefresh();
-            Log.Info("背包UI刷新");
+            
+            // 如果 BagSystem 已初始化，刷新显示
+            if (BagSystem.Instance.IsInitialized)
+            {
+                RefreshAllItems();
+            }
         }
 
         protected override void OnDestroy()
         {
             m_slots.Clear();
-            m_items.Clear();
+            m_itemWidgets.Clear();
             base.OnDestroy();
+        }
+
+        #endregion
+
+        #region 资源加载
+
+        private async void LoadPrefabsAsync()
+        {
+            try
+            {
+                var slotTask = GameModule.Resource.LoadAssetAsync<GameObject>(SlotPrefabPath);
+                var itemTask = GameModule.Resource.LoadAssetAsync<GameObject>(ItemPrefabPath);
+
+                m_slotPrefab = await slotTask;
+                m_itemPrefab = await itemTask;
+                m_prefabsLoaded = true;
+
+                Log.Info($"预制体加载完成 - Slot: {m_slotPrefab != null}, Item: {m_itemPrefab != null}");
+
+                // 初始化 BagSystem（如果还没初始化）
+                if (!BagSystem.Instance.IsInitialized)
+                {
+                    BagSystem.Instance.Initialize(9);
+                }
+                else
+                {
+                    // 已经初始化，直接创建槽位并刷新
+                    CreateSlotWidgets(BagSystem.Instance.SlotCount);
+                    RefreshAllItems();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Log.Error($"预制体加载失败: {e.Message}");
+                m_prefabsLoaded = true;
+
+                if (!BagSystem.Instance.IsInitialized)
+                {
+                    BagSystem.Instance.Initialize(9);
+                }
+            }
+        }
+
+        #endregion
+
+        #region 事件处理（响应 BagData 变化）
+
+        /// <summary>
+        /// 背包初始化完成
+        /// </summary>
+        private void OnBagInitialized(int slotCount)
+        {
+            Log.Info($"[GameBagUI] 收到背包初始化事件，槽位数: {slotCount}");
+            CreateSlotWidgets(slotCount);
+        }
+
+        /// <summary>
+        /// 物品添加
+        /// </summary>
+        private void OnItemAdded(ItemData itemData)
+        {
+            Log.Info($"[GameBagUI] 收到物品添加事件: {itemData.Name} -> 槽位 {itemData.SlotIndex}");
+            CreateItemWidget(itemData);
+        }
+
+        /// <summary>
+        /// 物品移除
+        /// </summary>
+        private void OnItemRemoved(int itemId)
+        {
+            Log.Info($"[GameBagUI] 收到物品移除事件: ID={itemId}");
+            RemoveItemWidget(itemId);
+        }
+
+        /// <summary>
+        /// 物品移动
+        /// </summary>
+        private void OnItemMoved(int itemId, int fromSlotIndex, int toSlotIndex)
+        {
+            Log.Info($"[GameBagUI] 收到物品移动事件: ID={itemId}, {fromSlotIndex} -> {toSlotIndex}");
+            RefreshItemPosition(itemId, toSlotIndex);
+        }
+
+        /// <summary>
+        /// 背包已满
+        /// </summary>
+        private void OnBagFull()
+        {
+            Log.Warning("[GameBagUI] 背包已满！");
+            // 可以在这里显示提示 UI
         }
 
         #endregion
 
         #region 槽位管理
 
-        /// <summary>
-        /// 查找预制体引用
-        /// </summary>
-        private void FindPrefabs()
+        private void CreateSlotWidgets(int count)
         {
-            // 尝试从子节点查找模板预制体
-            var slotTemplate = m_slotContainer.Find("SlotTemplate");
-            if (slotTemplate != null)
+            // 清理旧的槽位
+            foreach (var slot in m_slots)
             {
-                m_slotPrefab = slotTemplate.gameObject;
-                m_slotPrefab.SetActive(false);
+                if (slot.gameObject != null)
+                {
+                    Object.Destroy(slot.gameObject);
+                }
             }
+            m_slots.Clear();
 
-            var itemTemplate = transform.Find("ItemTemplate");
-            if (itemTemplate != null)
-            {
-                m_itemPrefab = itemTemplate.gameObject;
-                m_itemPrefab.SetActive(false);
-            }
-        }
-
-        /// <summary>
-        /// 创建槽位
-        /// </summary>
-        private void CreateSlots(int count)
-        {
+            // 创建新的槽位
             for (int i = 0; i < count; i++)
             {
-                CreateSlot(i);
+                CreateSlotWidget(i);
             }
+
+            Log.Info($"[GameBagUI] 创建了 {count} 个槽位");
         }
 
-        /// <summary>
-        /// 创建单个槽位
-        /// </summary>
-        private Slot CreateSlot(int index)
+        private Slot CreateSlotWidget(int index)
         {
             GameObject slotGo;
 
@@ -133,8 +209,7 @@ namespace GameLogic
             }
             else
             {
-                // 如果没有预制体，创建简单的槽位
-                slotGo = CreateSimpleSlot();
+                slotGo = CreateSimpleSlotGo();
             }
 
             slotGo.name = $"Slot_{index}";
@@ -147,10 +222,7 @@ namespace GameLogic
             return slot;
         }
 
-        /// <summary>
-        /// 创建简单槽位（无预制体时使用）
-        /// </summary>
-        private GameObject CreateSimpleSlot()
+        private GameObject CreateSimpleSlotGo()
         {
             var go = new GameObject("Slot", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(m_slotContainer, false);
@@ -166,40 +238,19 @@ namespace GameLogic
 
         #endregion
 
-        #region 物品管理
+        #region 物品 Widget 管理
 
-        /// <summary>
-        /// 添加物品到第一个空槽位
-        /// </summary>
-        public Item AddItem(string itemName)
+        private void CreateItemWidget(ItemData itemData)
         {
-            // 找到第一个空槽位
-            Slot emptySlot = null;
-            foreach (var slot in m_slots)
+            if (itemData.SlotIndex < 0 || itemData.SlotIndex >= m_slots.Count)
             {
-                if (slot.IsEmpty)
-                {
-                    emptySlot = slot;
-                    break;
-                }
+                Log.Error($"无效的槽位索引: {itemData.SlotIndex}");
+                return;
             }
 
-            if (emptySlot == null)
-            {
-                Log.Warning("背包已满！");
-                return null;
-            }
+            var slot = m_slots[itemData.SlotIndex];
 
-            return AddItemToSlot(emptySlot, itemName);
-        }
-
-        /// <summary>
-        /// 添加物品到指定槽位
-        /// </summary>
-        private Item AddItemToSlot(Slot slot, string itemName)
-        {
             GameObject itemGo;
-
             if (m_itemPrefab != null)
             {
                 itemGo = Object.Instantiate(m_itemPrefab, slot.rectTransform);
@@ -207,31 +258,92 @@ namespace GameLogic
             }
             else
             {
-                // 如果没有预制体，创建简单的物品
-                itemGo = CreateSimpleItem(slot.rectTransform);
+                itemGo = CreateSimpleItemGo(slot.rectTransform);
             }
 
             var item = new Item();
             item.Create(this, itemGo);
-
-            // 设置物品数据
-            m_itemIdCounter++;
-            var randomColor = m_itemColors[m_itemIdCounter % m_itemColors.Length];
-            item.SetData(m_itemIdCounter, itemName, randomColor);
-
-            // 绑定到槽位
+            item.Refresh(itemData);  // 使用新的 Refresh 方法
             item.BindToSlot(slot);
 
-            m_items.Add(item);
-
-            Log.Info($"添加物品: {itemName} 到槽位 {slot.SlotIndex}");
-            return item;
+            m_itemWidgets[itemData.Id] = item;
         }
 
-        /// <summary>
-        /// 创建简单物品（无预制体时使用）
-        /// </summary>
-        private GameObject CreateSimpleItem(Transform parent)
+        private void RemoveItemWidget(int itemId)
+        {
+            if (m_itemWidgets.TryGetValue(itemId, out var item))
+            {
+                // 清理槽位引用
+                var slot = item.CurrentSlot;
+                slot?.ClearItem();
+
+                // 销毁 Widget
+                if (item.gameObject != null)
+                {
+                    Object.Destroy(item.gameObject);
+                }
+
+                m_itemWidgets.Remove(itemId);
+            }
+        }
+
+        private void RefreshItemPosition(int itemId, int newSlotIndex)
+        {
+            if (!m_itemWidgets.TryGetValue(itemId, out var item))
+                return;
+
+            if (newSlotIndex < 0 || newSlotIndex >= m_slots.Count)
+                return;
+
+            var newSlot = m_slots[newSlotIndex];
+
+            // 如果目标槽位有其他物品，也需要更新
+            var existingItem = newSlot.CurrentItem;
+            if (existingItem != null && existingItem != item)
+            {
+                // 获取原槽位
+                var oldSlot = item.CurrentSlot;
+                if (oldSlot != null)
+                {
+                    existingItem.BindToSlot(oldSlot);
+                }
+            }
+            else
+            {
+                // 清空原槽位
+                item.CurrentSlot?.ClearItem();
+            }
+
+            // 绑定到新槽位
+            item.BindToSlot(newSlot);
+        }
+
+        private void RefreshAllItems()
+        {
+            // 清理旧的物品 Widget
+            foreach (var kvp in m_itemWidgets)
+            {
+                if (kvp.Value.gameObject != null)
+                {
+                    Object.Destroy(kvp.Value.gameObject);
+                }
+            }
+            m_itemWidgets.Clear();
+
+            // 清理槽位引用
+            foreach (var slot in m_slots)
+            {
+                slot.ClearItem();
+            }
+
+            // 根据当前数据重新创建
+            foreach (var itemData in BagSystem.Instance.BagData.Items)
+            {
+                CreateItemWidget(itemData);
+            }
+        }
+
+        private GameObject CreateSimpleItemGo(Transform parent)
         {
             var go = new GameObject("Item", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(parent, false);
@@ -248,54 +360,37 @@ namespace GameLogic
 
         #endregion
 
-        #region 拖拽回调
+        #region 拖拽回调（供 Widget 调用）
 
-        /// <summary>
-        /// 获取当前悬停的槽位
-        /// </summary>
-        public Slot GetHoveredSlot()
-        {
-            return m_hoveredSlot;
-        }
+        public Slot GetHoveredSlot() => m_hoveredSlot;
 
-        /// <summary>
-        /// 物品开始拖拽
-        /// </summary>
         public void OnItemBeginDrag(Item item)
         {
             m_draggingItem = item;
-            Log.Info($"开始拖拽: {item.ItemName}");
         }
 
-        /// <summary>
-        /// 物品结束拖拽
-        /// </summary>
-        public void OnItemEndDrag(Item item)
+        public void OnItemEndDrag(Item item, Slot targetSlot)
         {
             m_draggingItem = null;
-            Log.Info($"结束拖拽: {item.ItemName}");
+
+            // 通过 BagSystem 移动物品（数据驱动）
+            if (targetSlot != null && targetSlot != item.CurrentSlot)
+            {
+                BagSystem.Instance.MoveItem(item.ItemId, targetSlot.SlotIndex);
+            }
         }
 
-        /// <summary>
-        /// 物品被点击
-        /// </summary>
         public void OnItemClicked(Item item)
         {
-            Log.Info($"点击物品: {item.ItemName}");
+            Log.Info($"点击物品: {item.ItemName} (ID: {item.ItemId})");
             // 可以在这里显示物品详情、使用物品等
         }
 
-        /// <summary>
-        /// 槽位悬停进入
-        /// </summary>
         public void OnSlotHoverEnter(Slot slot)
         {
             m_hoveredSlot = slot;
         }
 
-        /// <summary>
-        /// 槽位悬停离开
-        /// </summary>
         public void OnSlotHoverExit(Slot slot)
         {
             if (m_hoveredSlot == slot)
@@ -315,10 +410,10 @@ namespace GameLogic
 
         private partial void OnClick_AddItemBtn()
         {
-            // 添加一个随机物品
+            // 通过 BagSystem 添加物品（数据驱动）
             string[] itemNames = { "剑", "盾", "药水", "金币", "宝石", "卷轴" };
             var randomName = itemNames[Random.Range(0, itemNames.Length)];
-            AddItem(randomName);
+            BagSystem.Instance.TryAddItem(randomName);
         }
 
         #endregion
