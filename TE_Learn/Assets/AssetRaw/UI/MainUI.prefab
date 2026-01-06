@@ -401,7 +401,7 @@ GameObject:
   - component: {fileID: 6442488199033783212}
   - component: {fileID: 8767149396523469469}
   - component: {fileID: 2016316510557243038}
-  - component: {fileID: 5487661789152202984}
+  - component: {fileID: 6255974734680579205}
   m_Layer: 5
   m_Name: MainUI
   m_TagString: Untagged
@@ -493,7 +493,7 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 55
---- !u!114 &5487661789152202984
+--- !u!114 &6255974734680579205
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -511,7 +511,7 @@ MonoBehaviour:
   genCodePath: Assets/GameScripts/HotFix/GameLogic/UI/Gen
   className: MainUI
   impCodePath: Assets/GameScripts/HotFix/GameLogic/UI
-  isGenImpClass: 0
+  isGenImpClass: 1
   uiType: 
 --- !u!1 &7558903506401875140
 GameObject:

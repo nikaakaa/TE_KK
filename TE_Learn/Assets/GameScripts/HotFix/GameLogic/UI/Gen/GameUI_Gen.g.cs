@@ -17,20 +17,20 @@ namespace GameLogic
 		#region 脚本工具生成的代码
 
 		private UIBindComponent m_bindComponent;
-		private Button m_btn_ShowBag = null!;
+		private Button m_btn_OpenBag = null!;
 
 		protected override void ScriptGenerator()
 		{
 			m_bindComponent = gameObject.GetComponent<UIBindComponent>();
-			m_btn_ShowBag = m_bindComponent.GetComponent<Button>(0);
-			m_btn_ShowBag.onClick.AddListener(OnClick_ShowBagBtn);
+			m_btn_OpenBag = m_bindComponent.GetComponent<Button>(0);
+			m_btn_OpenBag.onClick.AddListener(OnClick_OpenBagBtn);
 		}
 
 		#endregion
 
 		#region 事件
 
-		private partial void OnClick_ShowBagBtn();
+		private partial void OnClick_OpenBagBtn();
 
 		#endregion
 	}

@@ -35,8 +35,9 @@ public partial class GameApp
 
     private static void StartGameLogic()
     {
-        // 显示主菜单界面
-        GameModule.UI.ShowUIAsync<MainUI>();
+        // 手动创建并注册模块（热更程序集中的模块需要手动注册）
+        var hfsmModule = new HotFixHFSMModule();
+        ModuleSystem.RegisterModule<IHotFixHFSMModule>(hfsmModule);
     }
 
     private static void Release()

@@ -17,17 +17,20 @@ namespace GameLogic
 		#region 脚本工具生成的代码
 
 		private UIBindComponent m_bindComponent;
-		private Button m_btn_CloneBag = null!;
+		private Button m_btn_CloseBag = null!;
+		private Button m_btn_AddSlot = null!;
 		private Button m_btn_AddItem = null!;
 		private ScrollRect m_scroll_Bag = null!;
 
 		protected override void ScriptGenerator()
 		{
 			m_bindComponent = gameObject.GetComponent<UIBindComponent>();
-			m_btn_CloneBag = m_bindComponent.GetComponent<Button>(0);
-			m_btn_AddItem = m_bindComponent.GetComponent<Button>(1);
-			m_scroll_Bag = m_bindComponent.GetComponent<ScrollRect>(2);
-			m_btn_CloneBag.onClick.AddListener(OnClick_CloneBagBtn);
+			m_btn_CloseBag = m_bindComponent.GetComponent<Button>(0);
+			m_btn_AddSlot = m_bindComponent.GetComponent<Button>(1);
+			m_btn_AddItem = m_bindComponent.GetComponent<Button>(2);
+			m_scroll_Bag = m_bindComponent.GetComponent<ScrollRect>(3);
+			m_btn_CloseBag.onClick.AddListener(OnClick_CloseBagBtn);
+			m_btn_AddSlot.onClick.AddListener(OnClick_AddSlotBtn);
 			m_btn_AddItem.onClick.AddListener(OnClick_AddItemBtn);
 		}
 
@@ -35,7 +38,9 @@ namespace GameLogic
 
 		#region 事件
 
-		private partial void OnClick_CloneBagBtn();
+		private partial void OnClick_CloseBagBtn();
+
+		private partial void OnClick_AddSlotBtn();
 
 		private partial void OnClick_AddItemBtn();
 
