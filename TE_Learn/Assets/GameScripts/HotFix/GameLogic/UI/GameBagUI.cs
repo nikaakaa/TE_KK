@@ -8,6 +8,9 @@ using UnityEngine.UI;
 namespace GameLogic
 {
 
+    /// <summary>
+    /// 背包 UI 窗口 - 使用接口事件方式接收背包事件
+    /// </summary>
     [Window(UILayer.UI, location: "GameBagUI")]
     public partial class GameBagUI
     {
@@ -16,25 +19,28 @@ namespace GameLogic
         public GameBagSystem bagSystem;
 
         public GameObject scrollViewContent => m_scroll_Bag.content.gameObject;
+
         protected override void RegisterEvent()
         {
-            AddUIEvent<BagSlotData>(GameBagSystem.OnAddSlotEvent, OnAddSlot);
-            AddUIEvent<BagItemData>(GameBagSystem.OnAddItemEvent, OnAddItem);
-            AddUIEvent<BagItemData>(GameBagSystem.OnFailSwapOrMoveEvent, OnFailSwapOrMove);
-            AddUIEvent<BagItemData>(GameBagSystem.OnMoveItemEvent, OnMoveItem);
-            AddUIEvent<BagItemData, BagItemData>(GameBagSystem.OnSwapItemEvent, OnSwapItem);
-
+            // 使用 Source Generator 生成的事件ID类订阅事件
+            AddUIEvent<BagSlotData>(IGameBagUIEvent_Event.OnAddSlot, OnAddSlot);
+            AddUIEvent<BagItemData>(IGameBagUIEvent_Event.OnAddItem, OnAddItem);
+            AddUIEvent<BagItemData>(IGameBagUIEvent_Event.OnFailSwapOrMove, OnFailSwapOrMove);
+            AddUIEvent<BagItemData>(IGameBagUIEvent_Event.OnMoveItem, OnMoveItem);
+            AddUIEvent<BagItemData, BagItemData>(IGameBagUIEvent_Event.OnSwapItem, OnSwapItem);
         }
 
-        #region 事件回调
+        #region IGameBagUIEvent 接口实现
 
-        public async void OnAddSlot(BagSlotData slotData)
+        public void OnAddSlot(BagSlotData slotData)
         {
             SlotWidget slotWidget
                 = CreateWidgetByType<SlotWidget>(scrollViewContent.transform);
             slotWidget.slotData = slotData;
             slotWidgetList.Add(slotWidget);
+            // Log.Error("添加了新的 SlotWidget，slotId=" + slotData.slotId);
         }
+
         public void OnAddItem(BagItemData itemData)
         {
             SlotWidget slotWidget = slotWidgetList.Find(
@@ -54,12 +60,14 @@ namespace GameLogic
             itemWidget.itemData = itemData;
             itemWidgetList.Add(itemWidget);
         }
+
         public void OnFailSwapOrMove(BagItemData dragItemData)
         {
             ItemWidget itemWidget = itemWidgetList.Find(
                 widget => widget.itemData.itemId == dragItemData.itemId);
             itemWidget.transform.localPosition = Vector3.zero;
         }
+
         public void OnMoveItem(BagItemData dragItemData)
         {
             ItemWidget itemWidget = itemWidgetList.Find(
@@ -69,6 +77,7 @@ namespace GameLogic
             itemWidget.transform.SetParent(slotWidget.transform);
             itemWidget.transform.localPosition = Vector3.zero;
         }
+
         public void OnSwapItem(BagItemData dragItemData, BagItemData pointerItemData)
         {
             ItemWidget dragItemWidget = itemWidgetList.Find(
@@ -85,11 +94,10 @@ namespace GameLogic
             pointerItemWidget.transform.localPosition = Vector3.zero;
         }
 
-
         #endregion
 
 
-        #region 事件
+        #region 按钮事件
 
         private partial void OnClick_CloseBagBtn()
         {
@@ -109,6 +117,7 @@ namespace GameLogic
 
 
     }
+
     public class OpenBagState : LeafState<HFContext>
     {
         protected override void OnEnter(HFContext ctx)
